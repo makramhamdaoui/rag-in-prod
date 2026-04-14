@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+logs/
+uploaded_files/
+*.pdf
+embedding_model/
+.DS_Store
+test.py

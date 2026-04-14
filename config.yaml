@@ -1,0 +1,19 @@
+embedding:
+  model_path: "sentence-transformers/all-mpnet-base-v2"
+  asymmetric: false
+  dimension: 768
+
+chunking:
+  chunk_size: 300
+  overlap: 100
+
+ollama:
+  model_name: "qwen3:8b"
+
+logging:
+  file_path: "logs/app.log"
+
+opensearch:
+  host: "localhost"
+  port: 9200
+  index: "documents"

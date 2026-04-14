@@ -1,0 +1,28 @@
+{
+  "settings": {
+    "index": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "knn": true
+    }
+  },
+  "mappings": {
+    "properties": {
+      "text": { "type": "text" },
+      "embedding": {
+        "type": "knn_vector",
+        "dimension": "{{EMBEDDING_DIMENSION}}",
+        "method": {
+          "engine": "faiss",
+          "space_type": "innerproduct",
+          "name": "hnsw",
+          "parameters": {
+            "ef_construction": 128,
+            "m": 24
+          }
+        }
+      },
+      "document_name": { "type": "keyword" }
+    }
+  }
+}
