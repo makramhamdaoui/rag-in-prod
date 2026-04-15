@@ -1,0 +1,38 @@
+# API
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+
+# Database
+sqlalchemy
+psycopg2-binary
+alembic
+
+# OpenSearch
+opensearch-py==2.7.1
+
+# Embeddings
+sentence-transformers==3.1.1
+torch==2.4.1
+
+# PDF parsing
+docling
+PyPDF2==3.0.1
+pytesseract==0.3.13
+Pillow==10.4.0
+
+# LLM
+ollama==0.3.3
+
+# Caching
+redis
+
+# Monitoring
+langfuse
+
+# Utils
+numpy==2.1.2
+pyyaml
+python-multipart
+requests==2.32.3

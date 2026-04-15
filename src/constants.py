@@ -1,27 +1,26 @@
-from pathlib import Path
-import yaml
+from src.config import get_settings
 
-_config_path = Path(__file__).parent.parent / "config.yaml"
-
-with open(_config_path, "r") as f:
-    _cfg = yaml.safe_load(f)
+_s = get_settings()
 
 # Embedding
-EMBEDDING_MODEL_PATH = _cfg["embedding"]["model_path"]
-ASYMMETRIC_EMBEDDING  = _cfg["embedding"]["asymmetric"]
-EMBEDDING_DIMENSION   = _cfg["embedding"]["dimension"]
+EMBEDDING_MODEL_PATH  = _s.embedding_model_path
+ASYMMETRIC_EMBEDDING  = _s.asymmetric_embedding
+EMBEDDING_DIMENSION   = _s.embedding_dimension
 
 # Chunking
-TEXT_CHUNK_SIZE    = _cfg["chunking"]["chunk_size"]
-TEXT_CHUNK_OVERLAP = _cfg["chunking"]["overlap"]
+TEXT_CHUNK_SIZE    = _s.text_chunk_size
+TEXT_CHUNK_OVERLAP = _s.text_chunk_overlap
 
 # Ollama
-OLLAMA_MODEL_NAME = _cfg["ollama"]["model_name"]
+OLLAMA_MODEL_NAME = _s.ollama_model_name
 
 # Logging
-LOG_FILE_PATH = _cfg["logging"]["file_path"]
+LOG_FILE_PATH = "logs/app.log"
 
 # OpenSearch
-OPENSEARCH_HOST  = _cfg["opensearch"]["host"]
-OPENSEARCH_PORT  = _cfg["opensearch"]["port"]
-OPENSEARCH_INDEX = _cfg["opensearch"]["index"]
+OPENSEARCH_HOST  = _s.opensearch_host
+OPENSEARCH_PORT  = _s.opensearch_port
+OPENSEARCH_INDEX = _s.opensearch_index
+
+# PostgreSQL
+POSTGRES_URL = _s.postgres_url

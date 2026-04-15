@@ -1,7 +1,7 @@
 embedding:
   model_path: "sentence-transformers/all-mpnet-base-v2"
   asymmetric: false
-  dimension: 768
+  dimension: 384
 
 chunking:
   chunk_size: 300
@@ -15,5 +15,8 @@ logging:
 
 opensearch:
   host: "localhost"
-  port: 9200
+  port: 9201
   index: "documents"
+
+postgres:
+  url: "postgresql://rag_user:rag_password@localhost:5433/rag_db"

@@ -1,5 +1,6 @@
 import uuid
 import logging
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
@@ -7,18 +8,20 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from src.chat import generate_response_streaming
-from src.constants import OLLAMA_MODEL_NAME
+from src.constants import OLLAMA_MODEL_NAME, TEXT_CHUNK_SIZE, TEXT_CHUNK_OVERLAP
 from src.ingestion import create_index, create_search_pipeline, bulk_index_documents, delete_documents_by_name
 from src.opensearch import get_opensearch_client
 from src.ocr import extract_text_from_pdf
 from src.embeddings import generate_embeddings
 from src.utils import chunk_text, setup_logging
-from src.constants import TEXT_CHUNK_SIZE, TEXT_CHUNK_OVERLAP
 
 setup_logging()
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="RAG in Production", version="1.0.0")
+
+# resolve project root relative to this file
+PROJECT_ROOT = Path(__file__).parent
 
 # in-memory session store
 sessions: Dict[str, List[Dict[str, str]]] = {}
@@ -28,7 +31,6 @@ sessions: Dict[str, List[Dict[str, str]]] = {}
 
 @app.on_event("startup")
 def startup():
-    """Create OpenSearch index and search pipeline on startup."""
     client = get_opensearch_client()
     create_index(client)
     create_search_pipeline(client)
@@ -50,7 +52,6 @@ class SessionResponse(BaseModel):
 
 @app.post("/session", response_model=SessionResponse)
 def create_session():
-    """Create a new chat session."""
     session_id = str(uuid.uuid4())
     sessions[session_id] = []
     return SessionResponse(session_id=session_id)
@@ -58,7 +59,6 @@ def create_session():
 
 @app.get("/session/{session_id}/history")
 def get_history(session_id: str):
-    """Return chat history for a session."""
     if session_id not in sessions:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"session_id": session_id, "history": sessions[session_id]}
@@ -66,7 +66,6 @@ def get_history(session_id: str):
 
 @app.delete("/session/{session_id}")
 def delete_session(session_id: str):
-    """Delete a session and its history."""
     if session_id not in sessions:
         raise HTTPException(status_code=404, detail="Session not found")
     del sessions[session_id]
@@ -77,11 +76,21 @@ def delete_session(session_id: str):
 
 @app.post("/documents/ingest")
 def ingest_document(file_path: str):
-    """Extract, chunk, embed and index a PDF from disk."""
-    text = extract_text_from_pdf(file_path)
+    """
+    Ingest a PDF into OpenSearch.
+    Accepts absolute paths or paths relative to the project root.
+    """
+    path = Path(file_path)
+    if not path.is_absolute():
+        path = PROJECT_ROOT / path
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"File not found: {path}")
+
+    text = extract_text_from_pdf(str(path))
     chunks = chunk_text(text, chunk_size=TEXT_CHUNK_SIZE, overlap=TEXT_CHUNK_OVERLAP)
     embeddings = generate_embeddings(chunks)
-    document_name = file_path.split("/")[-1]
+    document_name = path.name
+
     documents = [
         {
             "doc_id": str(uuid.uuid4()),
@@ -97,7 +106,6 @@ def ingest_document(file_path: str):
 
 @app.delete("/documents/{document_name}")
 def delete_document(document_name: str):
-    """Delete all chunks for a document from the index."""
     response = delete_documents_by_name(document_name)
     return {"deleted": response.get("deleted", 0), "document": document_name}
 
@@ -114,10 +122,6 @@ class ChatRequest(BaseModel):
 
 @app.post("/chat")
 def chat(request: ChatRequest):
-    """
-    Send a message and get a streaming response.
-    Creates a new session automatically if session_id is not provided.
-    """
     session_id = request.session_id or str(uuid.uuid4())
     if session_id not in sessions:
         sessions[session_id] = []

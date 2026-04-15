@@ -1,0 +1,124 @@
+services:
+
+  api:
+    build: .
+    container_name: rag-api
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    env_file:
+      - .env
+    environment:
+      - OPENSEARCH_HOST=opensearch
+      - OPENSEARCH_PORT=9200        # container-internal port, always 9200
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - OLLAMA_HOST=http://host.docker.internal:11434
+    volumes:
+      - ./uploaded_files:/app/uploaded_files
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - rag-network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: rag-postgres
+    environment:
+      - POSTGRES_DB=rag_db
+      - POSTGRES_USER=rag_user
+      - POSTGRES_PASSWORD=rag_password
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rag_user -d rag_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - rag-network
+
+  opensearch:
+    image: opensearchproject/opensearch:2.11.0
+    container_name: rag-opensearch
+    environment:
+      - discovery.type=single-node
+      - DISABLE_SECURITY_PLUGIN=true
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "9202:9200"    # 9200 and 9201 already taken on host → use 9202
+      - "9602:9600"
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - rag-network
+
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:2.11.0
+    container_name: rag-dashboards
+    ports:
+      - "5602:5601"    # 5601 already taken on host → use 5602
+    environment:
+      - OPENSEARCH_HOSTS=http://opensearch:9200    # internal network, always 9200
+      - DISABLE_SECURITY_DASHBOARDS_PLUGIN=true
+    depends_on:
+      - opensearch
+    restart: unless-stopped
+    networks:
+      - rag-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: rag-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - rag-network
+
+volumes:
+  postgres_data:
+  opensearch_data:
+  redis_data:
+
+networks:
+  rag-network:
+    driver: bridge
