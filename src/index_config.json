@@ -8,21 +8,28 @@
   },
   "mappings": {
     "properties": {
-      "text": { "type": "text" },
-      "embedding": {
+      "text":                { "type": "text" },
+      "embedding":           {
         "type": "knn_vector",
-        "dimension": "{{EMBEDDING_DIMENSION}}",
+        "dimension": 768,
         "method": {
           "engine": "faiss",
           "space_type": "innerproduct",
           "name": "hnsw",
-          "parameters": {
-            "ef_construction": 128,
-            "m": 24
-          }
+          "parameters": { "ef_construction": 128, "m": 24 }
         }
       },
-      "document_name": { "type": "keyword" }
+      "document_id":         { "type": "keyword" },
+      "document_name":       { "type": "keyword" },
+      "section_title":       { "type": "text" },
+      "page_number":         { "type": "integer" },
+      "chunk_index":         { "type": "integer" },
+      "global_chunk_index":  { "type": "integer" },
+      "total_chunks":        { "type": "integer" },
+      "section_index":       { "type": "integer" },
+      "total_sections":      { "type": "integer" },
+      "char_count":          { "type": "integer" },
+      "indexed_at":          { "type": "date" }
     }
   }
 }
