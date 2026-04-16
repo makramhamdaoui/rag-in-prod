@@ -218,22 +218,34 @@ def chat(request: ChatRequest):
 @app.post("/chat/cached")
 def chat_cached(request: ChatRequest):
     """
-    Chat endpoint with Redis caching.
-    Returns cached response instantly if same query was asked before.
-    Streaming is skipped for cached responses.
+    Chat with semantic caching.
+    - Exact match: same query → instant response
+    - Semantic match: similar query (cosine > 0.92) → instant response
+    - Miss: full RAG pipeline → store in cache
     """
     from src.services.cache.client import get_cached_response, store_cached_response
+    from src.embeddings import get_embedding_model
 
-    # check cache first
+    # embed query once — used for both semantic search and cache lookup
+    model = get_embedding_model()
+    query_embedding = model.encode(request.query).tolist()
+
+    # check cache
     cached = get_cached_response(
         query=request.query,
         num_results=request.num_results,
         use_hybrid_search=request.use_hybrid_search,
+        query_embedding=query_embedding,
     )
     if cached:
-        return {"response": cached, "cached": True}
+        return {
+            "response": cached["response"],
+            "cached": True,
+            "match_type": cached["match_type"],
+            "similarity": cached["similarity"],
+        }
 
-    # not cached — run full RAG
+    # cache miss — run full RAG
     session_id = request.session_id or str(uuid.uuid4())
     if session_id not in sessions:
         sessions[session_id] = []
@@ -250,19 +262,24 @@ def chat_cached(request: ChatRequest):
     if stream is None:
         raise HTTPException(status_code=500, detail="Model failed to respond")
 
-    # collect full response
     full_response = ""
     for chunk in stream:
         full_response += chunk["message"]["content"]
 
-    # store in history and cache
     history.append({"role": "user", "content": request.query})
     history.append({"role": "assistant", "content": full_response})
+
+    # store with embedding for semantic matching
     store_cached_response(
         query=request.query,
         num_results=request.num_results,
         use_hybrid_search=request.use_hybrid_search,
         response=full_response,
+        query_embedding=query_embedding,
     )
 
-    return {"response": full_response, "cached": False, "session_id": session_id}
+    return {
+        "response": full_response,
+        "cached": False,
+        "session_id": session_id,
+    }
