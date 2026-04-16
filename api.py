@@ -2,25 +2,27 @@ import uuid
 import logging
 from pathlib import Path
 from typing import Dict, List, Optional
+from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from src.chat import generate_response_streaming
-from src.constants import OLLAMA_MODEL_NAME, TEXT_CHUNK_SIZE, TEXT_CHUNK_OVERLAP
-from src.ingestion import create_index, create_search_pipeline, bulk_index_documents, delete_documents_by_name
+from src.config import get_settings
+from src.ingestion import create_index, create_search_pipeline, bulk_index_chunks, delete_chunks_by_document_id
 from src.opensearch import get_opensearch_client
-from src.ocr import extract_text_from_pdf
+from src.services.pdf_parser.docling_parser import DoclingPDFParser
 from src.embeddings import generate_embeddings
-from src.utils import chunk_text, setup_logging
+from src.utils import chunk_document, setup_logging
+from src.database.connection import create_tables, get_db
+from src.models.document import Document, DocumentStatus
 
 setup_logging()
 logger = logging.getLogger(__name__)
 
+settings = get_settings()
 app = FastAPI(title="RAG in Production", version="1.0.0")
-
-# resolve project root relative to this file
 PROJECT_ROOT = Path(__file__).parent
 
 # in-memory session store
@@ -31,6 +33,7 @@ sessions: Dict[str, List[Dict[str, str]]] = {}
 
 @app.on_event("startup")
 def startup():
+    create_tables()
     client = get_opensearch_client()
     create_index(client)
     create_search_pipeline(client)
@@ -41,7 +44,7 @@ def startup():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "model": OLLAMA_MODEL_NAME}
+    return {"status": "ok", "model": settings.ollama_model_name}
 
 
 # ─── sessions ─────────────────────────────────────────────────────────────────
@@ -74,40 +77,93 @@ def delete_session(session_id: str):
 
 # ─── documents ────────────────────────────────────────────────────────────────
 
+@app.get("/documents")
+def list_documents():
+    """List all indexed documents from PostgreSQL."""
+    db = next(get_db())
+    docs = db.query(Document).all()
+    return {"documents": [d.to_dict() for d in docs]}
+
+
 @app.post("/documents/ingest")
 def ingest_document(file_path: str):
-    """
-    Ingest a PDF into OpenSearch.
-    Accepts absolute paths or paths relative to the project root.
-    """
+    """Ingest a PDF — extract, chunk, embed and index into OpenSearch + PostgreSQL."""
     path = Path(file_path)
     if not path.is_absolute():
         path = PROJECT_ROOT / path
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"File not found: {path}")
 
-    text = extract_text_from_pdf(str(path))
-    chunks = chunk_text(text, chunk_size=TEXT_CHUNK_SIZE, overlap=TEXT_CHUNK_OVERLAP)
-    embeddings = generate_embeddings(chunks)
-    document_name = path.name
+    db = next(get_db())
 
-    documents = [
-        {
-            "doc_id": str(uuid.uuid4()),
-            "text": chunk,
-            "embedding": emb,
-            "document_name": document_name,
+    # check if already indexed
+    existing = db.query(Document).filter(Document.name == path.name).first()
+    if existing and existing.status == DocumentStatus.indexed:
+        return {"message": f"Already indexed", "document": existing.to_dict()}
+
+    # create DB record
+    doc_record = Document(
+        id=str(uuid.uuid4()),
+        name=path.name,
+        path=str(path),
+        status=DocumentStatus.pending,
+        file_size=path.stat().st_size,
+    )
+    db.add(doc_record)
+    db.commit()
+
+    try:
+        # parse
+        parser = DoclingPDFParser()
+        parsed = parser.parse(str(path))
+        if not parsed:
+            raise ValueError("PDF parsing failed")
+
+        # chunk with metadata
+        chunks = chunk_document(
+            parsed_doc=parsed,
+            document_id=doc_record.id,
+            document_name=path.name,
+            chunk_size=settings.text_chunk_size,
+            overlap=settings.text_chunk_overlap,
+        )
+
+        # embed
+        embeddings = generate_embeddings([c["text"] for c in chunks])
+
+        # index into OpenSearch
+        success, errors = bulk_index_chunks(chunks, embeddings)
+
+        # update DB record
+        doc_record.status = DocumentStatus.indexed
+        doc_record.num_chunks = success
+        doc_record.num_pages = parsed.num_pages
+        doc_record.indexed_at = datetime.now(timezone.utc)
+        db.commit()
+
+        return {
+            "indexed": success,
+            "errors": len(errors),
+            "document": doc_record.to_dict(),
         }
-        for chunk, emb in zip(chunks, embeddings)
-    ]
-    success, errors = bulk_index_documents(documents)
-    return {"indexed": success, "errors": len(errors), "document": document_name}
+
+    except Exception as e:
+        doc_record.status = DocumentStatus.failed
+        db.commit()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.delete("/documents/{document_name}")
-def delete_document(document_name: str):
-    response = delete_documents_by_name(document_name)
-    return {"deleted": response.get("deleted", 0), "document": document_name}
+@app.delete("/documents/{document_id}")
+def delete_document(document_id: str):
+    """Delete document from OpenSearch and PostgreSQL."""
+    db = next(get_db())
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    delete_chunks_by_document_id(document_id)
+    db.delete(doc)
+    db.commit()
+    return {"deleted": document_id}
 
 
 # ─── chat ─────────────────────────────────────────────────────────────────────
