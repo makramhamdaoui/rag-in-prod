@@ -8,15 +8,34 @@ chunking:
   overlap: 100
 
 ollama:
+  host: "http://localhost:11434"
   model_name: "qwen3:8b"
 
 logging:
   file_path: "logs/app.log"
+  level: "INFO"
 
 opensearch:
   host: "localhost"
-  port: 9201
+  port: 9202
   index: "documents"
 
 postgres:
-  url: "postgresql://rag_user:rag_password@localhost:5433/rag_db"
+  host: "localhost"
+  port: 5433
+  database: "rag_db"
+
+redis:
+  host: "localhost"
+  port: 6380
+
+langfuse:
+  host: "http://localhost:3000"
+
+agents:
+  guardrail_threshold: 75
+  max_retrieval_attempts: 2
+
+cache:
+  ttl_seconds: 86400
+  similarity_threshold: 0.85
