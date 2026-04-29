@@ -1,12 +1,12 @@
 import logging
 from functools import lru_cache
-from typing import Any, List
+from typing import List
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
 from src.constants import EMBEDDING_MODEL_PATH
-from src.utils import setup_logging
+from src.logging import setup_logging
 
 setup_logging()
 logger = logging.getLogger(__name__)

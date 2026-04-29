@@ -1,23 +1,12 @@
 import logging
 from typing import Any, Dict, List
 
-from opensearchpy import OpenSearch
-
-from src.constants import OPENSEARCH_HOST, OPENSEARCH_INDEX, OPENSEARCH_PORT
-from src.utils import setup_logging
+from src.constants import OPENSEARCH_INDEX
+from src.services.search.client import get_opensearch_client
+from src.logging import setup_logging
 
 setup_logging()
 logger = logging.getLogger(__name__)
-
-
-def get_opensearch_client() -> OpenSearch:
-    return OpenSearch(
-        hosts=[{"host": OPENSEARCH_HOST, "port": OPENSEARCH_PORT}],
-        http_compress=True,
-        timeout=30,
-        max_retries=3,
-        retry_on_timeout=True,
-    )
 
 
 def hybrid_search(

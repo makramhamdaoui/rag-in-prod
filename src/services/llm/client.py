@@ -5,9 +5,10 @@ from typing import Dict, Iterable, List, Optional
 import ollama
 
 from src.constants import ASYMMETRIC_EMBEDDING, OLLAMA_MODEL_NAME
-from src.embeddings import get_embedding_model
-from src.opensearch import hybrid_search
-from src.utils import setup_logging
+from src.services.embeddings.client import get_embedding_model
+from src.services.llm.prompts import build_prompt
+from src.services.search.hybrid_search import hybrid_search
+from src.logging import setup_logging
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -43,30 +44,6 @@ def run_llm_streaming(
     except ollama.ResponseError as e:
         logger.error(f"Streaming error: {e.error}")
         return None
-
-
-def build_prompt(
-    query: str,
-    context: str,
-    history: List[Dict[str, str]],
-) -> str:
-    """Assemble the full prompt: system + context + history + query."""
-    prompt = "You are a knowledgeable assistant. "
-
-    if context:
-        prompt += "Use the following context to answer.\nContext:\n" + context + "\n"
-    else:
-        prompt += "Answer to the best of your knowledge.\n"
-
-    if history:
-        prompt += "Conversation History:\n"
-        for msg in history:
-            role = "User" if msg["role"] == "user" else "Assistant"
-            prompt += f"{role}: {msg['content']}\n"
-        prompt += "\n"
-
-    prompt += f"User: {query}\nAssistant:"
-    return prompt
 
 
 def generate_response_streaming(

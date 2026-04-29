@@ -1,17 +1,6 @@
 import logging
 import re
-from typing import List, Dict, Any
-
-
-def setup_logging() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler("logs/app.log"),
-            logging.StreamHandler(),
-        ],
-    )
+from typing import Any, Dict, List
 
 
 def clean_text(text: str) -> str:
@@ -107,7 +96,6 @@ def chunk_document(
         )
         all_chunks.extend(section_chunks)
 
-    # add global chunk index across whole document
     for i, chunk in enumerate(all_chunks):
         chunk["global_chunk_index"] = i
         chunk["total_chunks"] = len(all_chunks)

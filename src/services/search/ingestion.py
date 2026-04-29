@@ -7,15 +7,15 @@ from typing import Any, Dict, List, Tuple
 from opensearchpy import OpenSearch, helpers
 
 from src.constants import ASYMMETRIC_EMBEDDING, EMBEDDING_DIMENSION, OPENSEARCH_INDEX
-from src.opensearch import get_opensearch_client
-from src.utils import setup_logging
+from src.services.search.client import get_opensearch_client
+from src.logging import setup_logging
 
 setup_logging()
 logger = logging.getLogger(__name__)
 
 
 def load_index_config() -> Dict[str, Any]:
-    with open("src/index_config.json", "r") as f:
+    with open("config/opensearch_index.json", "r") as f:
         config = json.load(f)
     config["mappings"]["properties"]["embedding"]["dimension"] = EMBEDDING_DIMENSION
     logger.info("Index config loaded.")

@@ -6,7 +6,8 @@ import pytesseract
 from PIL import Image
 from PyPDF2 import PageObject, PdfReader
 
-from src.utils import clean_text, setup_logging
+from src.services.chunking.chunker import clean_text
+from src.logging import setup_logging
 
 setup_logging()
 logger = logging.getLogger(__name__)
