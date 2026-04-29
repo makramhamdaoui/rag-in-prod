@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 def create_app() -> FastAPI:
     setup_logging()
 
-    app = FastAPI(title="RAG in Production", version="1.0.0")
+    app = FastAPI(title="Chat with your PDF data", version="1.0.0")
     app.include_router(api_router)
 
     @app.on_event("startup")

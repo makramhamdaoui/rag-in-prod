@@ -1,10 +1,8 @@
-# RAG in Production
+# Chat with your PDF data
 
-A fully local, private RAG system. Documents are indexed into OpenSearch with hybrid search (BM25 + KNN). 
+A fully local, private RAG system. Drop in any PDF, ask questions, and get answers grounded in your documents — no data leaves your machine.
 
-Queries go through an agentic pipeline: guardrail → retrieve → grade → rewrite → generate,running on a local LLM via Ollama. 
-
-Responses are cached in Redis using exact and semantic matching.
+Documents are indexed into OpenSearch with hybrid search (BM25 + KNN). Queries go through an agentic pipeline: guardrail → retrieve → grade → rewrite → generate, running on a local LLM via Ollama. Responses are cached in Redis using exact and semantic matching.
 
 ## Stack
 
@@ -273,6 +271,60 @@ make status     # docker compose ps
 make logs       # tail -f compose logs
 make health     # curl all services and report status
 make clean      # down -v (destroys volumes)
+```
+
+## Local smoke test
+
+A full end-to-end check from zero to a streamed answer.
+
+**Terminal 1 — start the API**
+```bash
+source .venv/bin/activate
+uvicorn main:app --reload --port 8000
+```
+
+**Terminal 2 — run through the flow**
+
+```bash
+# 1. confirm the API is up
+curl http://localhost:8000/health
+
+# 2. place a PDF in the uploaded_files/ folder
+#    the folder is already in the repo (kept by .gitkeep)
+#    drop any PDF there, for example the Attention paper:
+#
+#      uploaded_files/
+#      └── attention is all you need.pdf   ← your PDF goes here
+#
+#    the path you pass to the ingest endpoint must match the filename exactly
+
+# 3. ingest the PDF
+curl -X POST "http://localhost:8000/documents/ingest?file_path=uploaded_files/attention%20is%20all%20you%20need.pdf"
+
+# 4. confirm it is indexed
+curl http://localhost:8000/documents
+
+# 5. ask a question (streaming)
+curl -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What is the attention mechanism?"}'
+
+# 6. same question via the agentic pipeline (shows reasoning steps + sources)
+curl -X POST http://localhost:8000/agentic \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What is the attention mechanism?"}' | python -m json.tool
+
+# 7. repeat the same question — should return a cache hit
+curl -X POST http://localhost:8000/chat/cached \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What is the attention mechanism?"}' | python -m json.tool
+# expect: "cached": true, "match_type": "exact"
+
+# 8. ask an off-topic question — guardrail should block it
+curl -X POST http://localhost:8000/agentic \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What is the best pizza recipe?"}' | python -m json.tool
+# expect: guardrail_score < 75, out-of-scope message
 ```
 
 ## Running tests
